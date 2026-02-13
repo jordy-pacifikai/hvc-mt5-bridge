@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 import MetaTrader5 as mt5
+import requests as http_requests
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel
@@ -401,6 +402,8 @@ def execute_signal(signal: dict) -> dict:
 
             # Log to file
             _log_trade(trade_result)
+            # Telegram notification for new trade
+            _send_telegram_open(trade_result, risk_pct)
             return trade_result
 
         elif result.retcode == 10004:  # Requote
@@ -490,6 +493,38 @@ def close_all_positions() -> dict:
     return {"success": len(errors) == 0, "closed": closed, "errors": errors}
 
 
+def _send_telegram_open(trade_result: dict, risk_pct: float):
+    """Send Telegram notification when a trade is opened."""
+    tg_cfg = config.get("telegram", {})
+    token = tg_cfg.get("bot_token", "")
+    chat_id = tg_cfg.get("chat_id", "")
+    if not token or not chat_id:
+        return
+
+    symbol = trade_result["symbol"].replace("-STD", "")
+    direction = trade_result["direction"]
+    lot = trade_result["lot"]
+    price = trade_result["price"]
+    sl = trade_result["sl"]
+    tp = trade_result["tp"]
+
+    msg = (
+        f"*** <b>{symbol} {direction}</b> ***\n"
+        f"Lot: {lot} | Risk: {risk_pct}%\n"
+        f"Entry: {price:.5f} | SL: {sl:.5f} | TP: {tp:.5f}"
+    )
+
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        http_requests.post(url, json={
+            "chat_id": chat_id,
+            "text": msg,
+            "parse_mode": "HTML",
+        }, timeout=10)
+    except Exception as e:
+        logger.error(f"Telegram open send failed: {e}")
+
+
 # ════════════════════════════════════════════
 # TRADE LOGGING
 # ════════════════════════════════════════════
@@ -530,7 +565,7 @@ def _update_daily_stats(field: str):
 # ════════════════════════════════════════════
 
 def position_monitor_loop():
-    """Background thread: detect closed positions."""
+    """Background thread: detect closed positions and send Telegram alerts."""
     global known_positions
 
     while True:
@@ -567,13 +602,16 @@ def position_monitor_loop():
             closed_tickets = set(known_positions.keys()) - current_tickets
             for ticket in closed_tickets:
                 pos_data = known_positions.pop(ticket)
+                # Get close details from MT5 deal history
+                close_info = _get_close_details(ticket, pos_data)
                 logger.info(
                     f"POSITION CLOSED: Ticket {ticket} | "
                     f"{pos_data['symbol']} {pos_data['type']} | "
-                    f"Last P&L: ${pos_data.get('profit', 0):.2f}"
+                    f"{close_info['reason']} | P&L: ${close_info['profit']:.2f}"
                 )
-                # Could send notification to n8n here
-                _notify_closed_position(ticket, pos_data)
+                _log_trade(close_info)
+                _send_telegram_result(ticket, pos_data, close_info)
+                _notify_closed_position(ticket, pos_data, close_info)
 
             time.sleep(30)
 
@@ -582,26 +620,126 @@ def position_monitor_loop():
             time.sleep(60)
 
 
-def _notify_closed_position(ticket: int, pos_data: dict):
+def _get_close_details(ticket: int, pos_data: dict) -> dict:
+    """Get close price and reason (SL/TP/manual) from MT5 deal history."""
+    try:
+        from datetime import timedelta
+        # Search deals for this position in last 7 days
+        now = datetime.now(timezone.utc)
+        week_ago = now - timedelta(days=7)
+        deals = mt5.history_deals_get(week_ago, now, position=ticket)
+
+        if deals:
+            # Find the closing deal (DEAL_ENTRY_OUT = 1)
+            for deal in reversed(deals):
+                if deal.entry == 1:  # DEAL_ENTRY_OUT
+                    close_price = deal.price
+                    profit = deal.profit
+                    # Determine reason
+                    reason = "MANUAL"
+                    if deal.reason == 3:  # DEAL_REASON_SL
+                        reason = "SL"
+                    elif deal.reason == 4:  # DEAL_REASON_TP
+                        reason = "TP"
+                    elif deal.reason == 0:  # DEAL_REASON_CLIENT
+                        reason = "MANUAL"
+
+                    # Calculate R multiple
+                    sl_dist = abs(pos_data["open_price"] - pos_data["sl"])
+                    if sl_dist > 0:
+                        if pos_data["type"] == "BUY":
+                            pnl_pips = close_price - pos_data["open_price"]
+                        else:
+                            pnl_pips = pos_data["open_price"] - close_price
+                        r_multiple = round(pnl_pips / sl_dist, 2)
+                    else:
+                        r_multiple = 0
+
+                    return {
+                        "reason": reason,
+                        "close_price": close_price,
+                        "profit": profit,
+                        "r_multiple": r_multiple,
+                        "ticket": ticket,
+                        "symbol": pos_data["symbol"],
+                        "direction": pos_data["type"],
+                        "volume": pos_data["volume"],
+                        "open_price": pos_data["open_price"],
+                        "sl": pos_data["sl"],
+                        "tp": pos_data["tp"],
+                        "timestamp": now.isoformat(),
+                    }
+    except Exception as e:
+        logger.error(f"Failed to get close details for {ticket}: {e}")
+
+    # Fallback if deal history unavailable
+    return {
+        "reason": "UNKNOWN",
+        "close_price": 0,
+        "profit": pos_data.get("profit", 0),
+        "r_multiple": 0,
+        "ticket": ticket,
+        "symbol": pos_data["symbol"],
+        "direction": pos_data["type"],
+        "volume": pos_data["volume"],
+        "open_price": pos_data["open_price"],
+        "sl": pos_data.get("sl", 0),
+        "tp": pos_data.get("tp", 0),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _send_telegram_result(ticket: int, pos_data: dict, close_info: dict):
+    """Send trade result to Telegram."""
+    tg_cfg = config.get("telegram", {})
+    token = tg_cfg.get("bot_token", "")
+    chat_id = tg_cfg.get("chat_id", "")
+    if not token or not chat_id:
+        return
+
+    reason = close_info["reason"]
+    profit = close_info["profit"]
+    r_mult = close_info["r_multiple"]
+
+    if reason == "TP":
+        emoji = "+"
+        icon = "TP"
+    elif reason == "SL":
+        emoji = "-"
+        icon = "SL"
+    else:
+        emoji = "~"
+        icon = reason
+
+    symbol_clean = pos_data["symbol"].replace("-STD", "")
+    direction = pos_data["type"]
+
+    msg = (
+        f"{emoji} <b>{symbol_clean} {icon}</b>: {direction} | "
+        f"{r_mult:+.1f}R | ${profit:+.2f}\n"
+        f"Open: {pos_data['open_price']} | Close: {close_info['close_price']} | "
+        f"Lot: {pos_data['volume']}"
+    )
+
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        http_requests.post(url, json={
+            "chat_id": chat_id,
+            "text": msg,
+            "parse_mode": "HTML",
+        }, timeout=10)
+    except Exception as e:
+        logger.error(f"Telegram send failed: {e}")
+
+
+def _notify_closed_position(ticket: int, pos_data: dict, close_info: dict):
     """Send closed position notification via webhook (optional)."""
     webhook_url = config.get("notifications", {}).get("result_webhook")
     if not webhook_url:
         return
 
     try:
-        import requests
-
-        payload = {
-            "type": "MT5_POSITION_CLOSED",
-            "ticket": ticket,
-            "symbol": pos_data["symbol"],
-            "direction": pos_data["type"],
-            "volume": pos_data["volume"],
-            "open_price": pos_data["open_price"],
-            "last_profit": pos_data.get("profit", 0),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        requests.post(webhook_url, json=payload, timeout=10)
+        http_requests.post(webhook_url, json=close_info, timeout=10)
     except Exception as e:
         logger.error(f"Failed to notify closed position: {e}")
 
