@@ -263,9 +263,12 @@ def get_filling_type(mt5_symbol: str) -> int:
         return mt5.ORDER_FILLING_IOC
 
     filling = info.filling_mode
-    if filling & mt5.SYMBOL_FILLING_FOK:
+    # Use numeric constants for compatibility (FOK=1, IOC=2)
+    FILLING_FOK = getattr(mt5, 'SYMBOL_FILLING_FOK', 1)
+    FILLING_IOC = getattr(mt5, 'SYMBOL_FILLING_IOC', 2)
+    if filling & FILLING_FOK:
         return mt5.ORDER_FILLING_FOK
-    elif filling & mt5.SYMBOL_FILLING_IOC:
+    elif filling & FILLING_IOC:
         return mt5.ORDER_FILLING_IOC
     return mt5.ORDER_FILLING_RETURN
 
