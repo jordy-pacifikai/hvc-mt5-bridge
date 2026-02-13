@@ -1,0 +1,43 @@
+{
+  "asset": "GBPJPY",
+  "version": "v3.1-expanded",
+  "validated_on": "2023-01-02 to 2024-12-04",
+  "params": {
+    "sl": 7.0,
+    "rr": 3.5,
+    "min_wick": 0.6,
+    "max_zone": 40,
+    "short_hours": [
+      0,
+      1,
+      6,
+      8,
+      15,
+      16
+    ],
+    "long_hours": [
+      0,
+      7,
+      14,
+      15
+    ]
+  },
+  "expected_performance": {
+    "wr": 64.4,
+    "trades_per_month": 3.9,
+    "trades_per_day": 0.13,
+    "total_r": 172.3,
+    "profit_factor": 6.33,
+    "sharpe": 2.9,
+    "max_dd_r": -4.0
+  },
+  "walk_forward": {
+    "profitable_periods": "8/8",
+    "total_oos_r": 172.3
+  },
+  "monte_carlo": {
+    "prob_profitable": 100.0,
+    "worst_dd": -5.5
+  },
+  "changes_from_v3.1": "Added SHORT [0] + LONG [7]. 90 trades (vs 57), +29% R, WR 64.4% (vs 73.7%). WF 8/8, MC 100%."
+}

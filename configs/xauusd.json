@@ -1,0 +1,46 @@
+{
+  "asset": "XAUUSD",
+  "version": "v3.2-new",
+  "validated_on": "2023-01-01 to 2024-12-31",
+  "params": {
+    "sl": 15,
+    "rr": 2.5,
+    "min_wick": 0.4,
+    "max_zone": 200,
+    "short_hours": [
+      3,
+      5,
+      8,
+      9,
+      11,
+      14,
+      15,
+      16,
+      17
+    ],
+    "long_hours": [
+      0,
+      1,
+      2,
+      4,
+      6,
+      7,
+      11,
+      14,
+      15,
+      17,
+      18,
+      20
+    ]
+  },
+  "expected_performance": {
+    "wr": 63.3,
+    "trades_per_month": 22.4,
+    "trades_per_day": 0.75,
+    "total_r": 705.1,
+    "profit_factor": 4.3,
+    "sharpe": 2.5,
+    "max_dd_r": -3.5
+  },
+  "notes": "Gold (XAU/USD). Best instrument in portfolio. SL=15 pips ($1.50). Star hours: S3 73.7%, L2 76.9%, S9/S11 71.4%, L17 73.7%, L20 71.4%."
+}

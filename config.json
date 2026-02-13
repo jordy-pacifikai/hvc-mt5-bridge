@@ -25,7 +25,8 @@
       "XAUUSD": 80,
       "BTCUSDT": 500
     },
-    "symbol_risk_pct": {}
+    "symbol_risk_pct": {},
+    "max_drift_vs_sl": 0.5
   },
   "security": {
     "api_key": "CHANGE_ME_RANDOM_32_CHAR_KEY_HERE"

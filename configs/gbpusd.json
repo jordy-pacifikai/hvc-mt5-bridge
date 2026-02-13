@@ -1,0 +1,39 @@
+{
+  "asset": "GBPUSD",
+  "version": "v3.2-optimized",
+  "validated_on": "2023-01-01 to 2024-12-31",
+  "params": {
+    "sl": 4.0,
+    "rr": 2.5,
+    "min_wick": 0.4,
+    "max_zone": 25,
+    "short_hours": [
+      1,
+      5,
+      7,
+      9,
+      11,
+      12,
+      13
+    ],
+    "long_hours": [
+      2,
+      7,
+      8,
+      9,
+      13,
+      14,
+      15
+    ]
+  },
+  "expected_performance": {
+    "wr": 64.2,
+    "trades_per_month": 10.9,
+    "trades_per_day": 0.51,
+    "total_r": 308.0,
+    "profit_factor": 4.5,
+    "sharpe": 2.3,
+    "max_dd_r": -4.0
+  },
+  "changes_from_v3.1": "RR 3.0->2.5, zone 20->25. WR>=55% filter. 14hrs (vs 10). 2.2x trades (0.24->0.51/day). WR 57.3%->64.2%. Star hours: S13 81.8%, L9 75%, S9/S11 72.7%."
+}

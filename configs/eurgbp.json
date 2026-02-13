@@ -1,0 +1,33 @@
+{
+  "asset": "EURGBP",
+  "version": "v3.2-new",
+  "validated_on": "2023-01-01 to 2024-12-31",
+  "params": {
+    "sl": 2.5,
+    "rr": 2.5,
+    "min_wick": 0.4,
+    "max_zone": 20,
+    "short_hours": [
+      6,
+      11,
+      13,
+      14,
+      15
+    ],
+    "long_hours": [
+      12,
+      14,
+      15
+    ]
+  },
+  "expected_performance": {
+    "wr": 59.4,
+    "trades_per_month": 6.6,
+    "trades_per_day": 0.31,
+    "total_r": 165.9,
+    "profit_factor": 3.6,
+    "sharpe": 1.9,
+    "max_dd_r": -4.0
+  },
+  "notes": "NEW instrument. Cross pair, lower volatility. Star hours: L14 71.4%, S6 70.6%, L15 66.7%."
+}

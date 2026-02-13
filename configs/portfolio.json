@@ -1,0 +1,13 @@
+{
+  "max_total_concurrent_trades": 5,
+  "max_concurrent_per_asset": 2,
+  "max_correlated_trades": 3,
+  "max_daily_loss_r": -5.0,
+  "correlation_groups": {
+    "usd_long": ["EURUSD_LONG", "GBPUSD_LONG", "NZDUSD_LONG", "AUDUSD_LONG"],
+    "usd_short": ["EURUSD_SHORT", "GBPUSD_SHORT", "NZDUSD_SHORT", "AUDUSD_SHORT"],
+    "jpy_long": ["USDJPY_SHORT", "EURJPY_SHORT", "GBPJPY_SHORT"],
+    "jpy_short": ["USDJPY_LONG", "EURJPY_LONG", "GBPJPY_LONG"],
+    "aud_nzd": ["AUDUSD_LONG", "NZDUSD_LONG", "AUDUSD_SHORT", "NZDUSD_SHORT"]
+  }
+}

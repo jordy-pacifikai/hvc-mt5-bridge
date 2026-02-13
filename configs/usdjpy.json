@@ -1,0 +1,32 @@
+{
+  "asset": "USDJPY",
+  "version": "v3.2-optimized",
+  "validated_on": "2023-01-01 to 2024-12-31",
+  "params": {
+    "sl": 3.0,
+    "rr": 3.5,
+    "min_wick": 0.4,
+    "max_zone": 20,
+    "short_hours": [
+      6,
+      12,
+      13,
+      23
+    ],
+    "long_hours": [
+      0,
+      13,
+      23
+    ]
+  },
+  "expected_performance": {
+    "wr": 56.8,
+    "trades_per_month": 5.3,
+    "trades_per_day": 0.25,
+    "total_r": 182.0,
+    "profit_factor": 4.6,
+    "sharpe": 2.1,
+    "max_dd_r": -5.0
+  },
+  "changes_from_v3.1": "wick 0.5->0.4, added L13. 7hrs (vs 6). 2.5x trades (0.10->0.25/day). RR=3.5 highest forex. Star hours: S13 70%, S23 66.7%, S12 63.2%."
+}

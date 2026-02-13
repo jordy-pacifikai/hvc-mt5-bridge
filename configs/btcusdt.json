@@ -1,0 +1,46 @@
+{
+  "asset": "BTCUSDT",
+  "version": "v3.1-expanded",
+  "validated_on": "2023-01-01 to 2024-12-29",
+  "params": {
+    "sl": 100,
+    "rr": 2.5,
+    "min_wick": 0.4,
+    "max_zone": 1000,
+    "short_hours": [
+      1,
+      14,
+      18,
+      19
+    ],
+    "long_hours": [
+      1,
+      2,
+      7,
+      14,
+      15,
+      17,
+      18,
+      19
+    ]
+  },
+  "expected_performance": {
+    "wr": 70.2,
+    "trades_per_month": 14.0,
+    "trades_per_day": 0.66,
+    "total_r": 450.2,
+    "profit_factor": 5.5,
+    "sharpe": 2.8,
+    "max_dd_r": -4.8
+  },
+  "walk_forward": {
+    "profitable_periods": "8/8",
+    "total_oos_r": 127.8
+  },
+  "monte_carlo": {
+    "prob_profitable": 100.0,
+    "worst_dd": -4.0
+  },
+  "changes_from_v3.0": "SL 200->100, RR 3.0->2.5, wick 0.5->0.4, zone 700->1000. Top 12 hours WR>=60.5%. L7 94.1% WR, S19 90.9% WR. 9x more trades (0.07->0.66/day). Old config was 49.1% WR - now 70.2%.",
+  "star_hours": "L7 94.1% WR, S19 90.9% WR, L1 77.8% WR, L15 76.2% WR, S14 74.4% WR"
+}

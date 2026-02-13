@@ -797,6 +797,48 @@ def verify_api_key(x_api_key: str = Header(None)):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
 
+def _check_price_freshness(signal) -> dict:
+    """Check if signal entry price is still close to current market price.
+    Returns dict with 'fresh' bool, or None if check cannot be performed."""
+    mt5_symbol = get_mt5_symbol(signal.symbol)
+    if not mt5_symbol:
+        return None
+
+    if not ensure_connected():
+        return None
+
+    tick = mt5.symbol_info_tick(mt5_symbol)
+    if not tick:
+        return None
+
+    market_price = (tick.ask + tick.bid) / 2
+    entry_price = signal.entry_price
+    sl_price = signal.sl_price
+
+    drift = abs(market_price - entry_price)
+    sl_distance = abs(entry_price - sl_price)
+
+    max_drift_ratio = config["risk"].get("max_drift_vs_sl", 0.5)
+
+    drift_ratio = drift / sl_distance if sl_distance > 0 else 0
+
+    info = mt5.symbol_info(mt5_symbol)
+    if info and info.digits >= 4:
+        pip_mult = 10000
+    elif info and info.digits == 3:
+        pip_mult = 100
+    else:
+        pip_mult = 10
+    drift_pips = drift * pip_mult
+
+    return {
+        "fresh": drift_ratio <= max_drift_ratio,
+        "market_price": market_price,
+        "drift_pips": round(drift_pips, 1),
+        "drift_vs_sl": round(drift_ratio, 2),
+    }
+
+
 class SignalPayload(BaseModel):
     symbol: str
     direction: str
@@ -824,6 +866,27 @@ async def receive_signal(
         f"SIGNAL: {signal.direction} {signal.symbol} | "
         f"Entry: {signal.entry_price} SL: {signal.sl_price} TP: {signal.tp_price}"
     )
+
+    # ── Price freshness check ──
+    # Reject signals where the scanner's entry_price is too far from current market price.
+    # This protects against stale signals (SIGNAL_LOOKBACK + API delay = up to several minutes).
+    freshness = _check_price_freshness(signal)
+    if freshness and not freshness["fresh"]:
+        _update_daily_stats("trades_rejected")
+        logger.warning(
+            f"STALE SIGNAL REJECTED: {signal.symbol} | "
+            f"Signal entry: {signal.entry_price:.5f} | "
+            f"Market: {freshness['market_price']:.5f} | "
+            f"Drift: {freshness['drift_pips']:.1f} pips ({freshness['drift_vs_sl']:.1f}x SL)"
+        )
+        return {
+            "success": False,
+            "error": f"Stale signal: price drifted {freshness['drift_pips']:.1f} pips "
+                     f"({freshness['drift_vs_sl']:.1f}x SL distance) from entry",
+            "stale_reject": True,
+            "signal_entry": signal.entry_price,
+            "market_price": freshness["market_price"],
+        }
 
     result = execute_signal(signal.model_dump())
 

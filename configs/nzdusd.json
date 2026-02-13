@@ -1,0 +1,36 @@
+{
+  "asset": "NZDUSD",
+  "version": "v3.2-optimized",
+  "validated_on": "2023-01-01 to 2024-12-31",
+  "params": {
+    "sl": 2.5,
+    "rr": 2.5,
+    "min_wick": 0.4,
+    "max_zone": 20,
+    "short_hours": [
+      1,
+      7,
+      15
+    ],
+    "long_hours": [
+      0,
+      2,
+      6,
+      9,
+      10,
+      11,
+      12,
+      17
+    ]
+  },
+  "expected_performance": {
+    "wr": 63.0,
+    "trades_per_month": 9.1,
+    "trades_per_day": 0.43,
+    "total_r": 249.0,
+    "profit_factor": 4.3,
+    "sharpe": 2.2,
+    "max_dd_r": -5.0
+  },
+  "changes_from_v3.1": "SL 3.0->2.5, RR 4.0->2.5. WR>=55% filter. 11hrs (vs 2). 6x trades (0.07->0.43/day). WR->63%. Star hours: L11 83.3%, L6 75%, S15 70%."
+}

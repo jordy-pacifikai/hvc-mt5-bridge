@@ -1,0 +1,45 @@
+{
+  "asset": "EURJPY",
+  "version": "v3.1-expanded",
+  "validated_on": "2023-01-05 to 2024-12-27",
+  "params": {
+    "sl": 4.0,
+    "rr": 3.5,
+    "min_wick": 0.4,
+    "max_zone": 30,
+    "short_hours": [
+      1,
+      7,
+      23
+    ],
+    "long_hours": [
+      0,
+      1,
+      4,
+      5,
+      6,
+      12,
+      14,
+      16,
+      17
+    ]
+  },
+  "expected_performance": {
+    "wr": 59.9,
+    "trades_per_month": 10.5,
+    "trades_per_day": 0.34,
+    "total_r": 423.9,
+    "profit_factor": 4.12,
+    "sharpe": 3.5,
+    "max_dd_r": -6.0
+  },
+  "walk_forward": {
+    "profitable_periods": "8/8",
+    "total_oos_r": 423.9
+  },
+  "monte_carlo": {
+    "prob_profitable": 100.0,
+    "worst_dd": -9.0
+  },
+  "changes_from_v3.1": "Added LONG [1,5,6,16,17]. 242 trades (vs 145), +63% R, -1.5% WR. All new hours EV>0 and WR>=50%."
+}

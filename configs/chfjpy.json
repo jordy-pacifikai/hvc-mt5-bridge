@@ -1,0 +1,37 @@
+{
+  "asset": "CHFJPY",
+  "version": "v3.2-new",
+  "validated_on": "2023-01-01 to 2024-12-31",
+  "params": {
+    "sl": 5.0,
+    "rr": 2.5,
+    "min_wick": 0.4,
+    "max_zone": 40,
+    "short_hours": [
+      1,
+      2,
+      4,
+      5,
+      10,
+      11,
+      12,
+      14,
+      17,
+      18,
+      23
+    ],
+    "long_hours": [
+      0
+    ]
+  },
+  "expected_performance": {
+    "wr": 57.7,
+    "trades_per_month": 12.4,
+    "trades_per_day": 0.58,
+    "total_r": 280.7,
+    "profit_factor": 3.4,
+    "sharpe": 2.0,
+    "max_dd_r": -6.0
+  },
+  "notes": "NEW instrument. SHORT-heavy (11 short hrs, 1 long). Star hours: S2 66.7%, S17 63.6%, S12 62.1%."
+}
