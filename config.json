@@ -1,0 +1,55 @@
+{
+  "mt5": {
+    "account": 0,
+    "password": "",
+    "server": "Startrader-Demo",
+    "terminal_path": "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
+  },
+  "risk": {
+    "default_risk_pct": 1.0,
+    "max_risk_pct": 3.0,
+    "max_lot_per_trade": 5.0,
+    "slippage_points": 30,
+    "magic_number": 20260212,
+    "max_spread_points": {
+      "EURUSD": 30,
+      "GBPUSD": 35,
+      "USDJPY": 30,
+      "EURGBP": 40,
+      "GBPJPY": 50,
+      "EURJPY": 40,
+      "AUDUSD": 30,
+      "NZDUSD": 35,
+      "AUDJPY": 45,
+      "CHFJPY": 50,
+      "XAUUSD": 80,
+      "BTCUSDT": 500
+    },
+    "symbol_risk_pct": {}
+  },
+  "security": {
+    "api_key": "CHANGE_ME_RANDOM_32_CHAR_KEY_HERE"
+  },
+  "symbol_map": {
+    "EURUSD": "PLACEHOLDER",
+    "GBPUSD": "PLACEHOLDER",
+    "USDJPY": "PLACEHOLDER",
+    "EURGBP": "PLACEHOLDER",
+    "GBPJPY": "PLACEHOLDER",
+    "EURJPY": "PLACEHOLDER",
+    "AUDUSD": "PLACEHOLDER",
+    "NZDUSD": "PLACEHOLDER",
+    "AUDJPY": "PLACEHOLDER",
+    "CHFJPY": "PLACEHOLDER",
+    "XAUUSD": "PLACEHOLDER",
+    "BTCUSDT": null
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "notifications": {
+    "result_webhook": "",
+    "heartbeat_webhook": ""
+  }
+}
