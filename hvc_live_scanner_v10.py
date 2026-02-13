@@ -31,7 +31,6 @@ import sys
 import time
 import threading
 import random
-import MetaTrader5 as mt5
 from datetime import datetime, timedelta
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -51,33 +50,15 @@ CONFIGS_DIR.mkdir(exist_ok=True)
 STATE_DIR.mkdir(exist_ok=True)
 
 # ============================================================
-# MT5 CONNECTION
+# DATA SOURCES
 # ============================================================
-
-MT5_ACCOUNT = int(os.environ.get('MT5_ACCOUNT', '0'))
-MT5_PASSWORD = os.environ.get('MT5_PASSWORD', '')
-MT5_SERVER = os.environ.get('MT5_SERVER', 'VTMarkets-Live')
-MT5_TERMINAL_PATH = os.environ.get('MT5_TERMINAL_PATH', r'C:\Program Files\MetaTrader 5\terminal64.exe')
-
-# MT5 symbol suffix mapping (VT Markets uses -STD)
-MT5_SYMBOL_MAP = {
-    "AUDUSD": "AUDUSD-STD",
-    "EURUSD": "EURUSD-STD",
-    "GBPUSD": "GBPUSD-STD",
-    "USDJPY": "USDJPY-STD",
-    "NZDUSD": "NZDUSD-STD",
-    "EURJPY": "EURJPY-STD",
-    "GBPJPY": "GBPJPY-STD",
-    "AUDJPY": "AUDJPY-STD",
-    "CHFJPY": "CHFJPY-STD",
-    "EURGBP": "EURGBP-STD",
-    "XAUUSD": "XAUUSD-STD",
-}
 
 BINANCE_URL = "https://data-api.binance.vision/api/v3/klines"
 
-# Webhooks
-BRIDGE_URL = os.environ.get('HVC_BRIDGE_URL', 'http://localhost:8080/signal')
+# Bridge (single MT5 connection - scanner uses it for both data AND execution)
+BRIDGE_BASE_URL = os.environ.get('HVC_BRIDGE_URL', 'http://localhost:8080').rstrip('/')
+BRIDGE_SIGNAL_URL = f"{BRIDGE_BASE_URL}/signal"
+BRIDGE_CANDLES_URL = f"{BRIDGE_BASE_URL}/candles"
 BRIDGE_API_KEY = os.environ.get('HVC_BRIDGE_API_KEY', '')
 N8N_WEBHOOK_URL = os.environ.get('HVC_WEBHOOK_URL', 'https://n8n.srv1140766.hstgr.cloud/webhook/hvc-signal')
 N8N_RESULT_URL = os.environ.get('HVC_WEBHOOK_RESULT_URL', 'https://n8n.srv1140766.hstgr.cloud/webhook/hvc-result')
@@ -318,92 +299,61 @@ for sym in INSTRUMENTS:
     ASSET_PARAMS[sym] = cfg.get('params', cfg)
 
 # ============================================================
-# MT5 CONNECTION
+# BRIDGE CONNECTION CHECK
 # ============================================================
 
-def mt5_init():
-    """Initialize MT5 terminal connection."""
-    init_kwargs = {}
-    if MT5_TERMINAL_PATH:
-        init_kwargs['path'] = MT5_TERMINAL_PATH
-
-    if not mt5.initialize(**init_kwargs):
-        print(f"[FATAL] MT5 initialize failed: {mt5.last_error()}")
-        return False
-
-    if MT5_ACCOUNT and MT5_PASSWORD:
-        authorized = mt5.login(
-            login=MT5_ACCOUNT,
-            password=MT5_PASSWORD,
-            server=MT5_SERVER,
-        )
-        if not authorized:
-            print(f"[FATAL] MT5 login failed: {mt5.last_error()}")
-            mt5.shutdown()
-            return False
-
-    acct = mt5.account_info()
-    if acct:
-        print(f"[MT5] Connected - Account: {acct.login} | Balance: ${acct.balance:.2f} | Equity: ${acct.equity:.2f}")
-    else:
-        print("[MT5] Connected (no account info available)")
-    return True
-
-
-def mt5_ensure_connected():
-    """Check MT5 connection, reconnect if needed."""
+def bridge_check():
+    """Check if bridge is reachable and MT5 is connected."""
     try:
-        info = mt5.terminal_info()
-        if info is not None:
+        resp = requests.get(f"{BRIDGE_BASE_URL}/health", timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            print(f"[BRIDGE] Connected - Status: {data.get('status')} | Dry-run: {data.get('dry_run')}")
             return True
-    except Exception:
-        pass
-
-    print("[MT5] Disconnected, reconnecting...")
-    try:
-        mt5.shutdown()
-    except Exception:
-        pass
-    time.sleep(2)
-    return mt5_init()
+    except Exception as e:
+        print(f"[FATAL] Bridge not reachable at {BRIDGE_BASE_URL}: {e}")
+    return False
 
 # ============================================================
 # DATA FETCHING
 # ============================================================
 
 def fetch_mt5(symbol, outputsize=1000):
-    """Fetch M1 candles from MT5 terminal (replaces Twelve Data API)."""
-    mt5_symbol = MT5_SYMBOL_MAP.get(symbol)
-    if not mt5_symbol:
-        print(f"  [{symbol}] No MT5 symbol mapping")
+    """Fetch M1 candles via bridge HTTP API (avoids MT5 IPC conflicts)."""
+    try:
+        resp = requests.get(
+            BRIDGE_CANDLES_URL,
+            params={"symbol": symbol, "count": outputsize},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            print(f"  [{symbol}] Bridge candles error: {resp.status_code} {resp.text[:100]}")
+            return None
+
+        data = resp.json()
+        candles = data.get("candles", [])
+        if not candles:
+            print(f"  [{symbol}] Bridge returned 0 candles")
+            return None
+
+        df = pd.DataFrame(candles)
+        df['datetime'] = pd.to_datetime(df['time'], unit='s')
+        df = df.set_index('datetime')
+        df = df[['open', 'high', 'low', 'close']].astype(float)
+
+        # Update stats
+        stats['last_scan_time'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        stats['last_scan_per_asset'] = stats.get('last_scan_per_asset', {})
+        stats['last_scan_per_asset'][symbol] = stats['last_scan_time']
+
+        return df
+
+    except requests.exceptions.ConnectionError:
+        print(f"  [{symbol}] Bridge not reachable at {BRIDGE_CANDLES_URL}")
         return None
-
-    if not mt5_ensure_connected():
-        print(f"  [{symbol}] MT5 not connected")
+    except Exception as e:
+        print(f"  [{symbol}] Bridge fetch error: {e}")
         return None
-
-    # Ensure symbol is in MarketWatch
-    if not mt5.symbol_select(mt5_symbol, True):
-        print(f"  [{symbol}] Cannot select {mt5_symbol} in MarketWatch")
-        return None
-
-    rates = mt5.copy_rates_from_pos(mt5_symbol, mt5.TIMEFRAME_M1, 0, outputsize)
-    if rates is None or len(rates) == 0:
-        error = mt5.last_error()
-        print(f"  [{symbol}] MT5 fetch failed: {error}")
-        return None
-
-    df = pd.DataFrame(rates)
-    df['datetime'] = pd.to_datetime(df['time'], unit='s')
-    df = df.set_index('datetime')
-    df = df[['open', 'high', 'low', 'close']].astype(float)
-
-    # Update stats
-    stats['last_scan_time'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-    stats['last_scan_per_asset'] = stats.get('last_scan_per_asset', {})
-    stats['last_scan_per_asset'][symbol] = stats['last_scan_time']
-
-    return df
 
 
 def fetch_binance(symbol, outputsize=1000):
@@ -944,12 +894,12 @@ def add_active_trade(signal):
 def send_webhook(signal):
     """Send signal to MT5 bridge (execution) and n8n (Telegram notifications)."""
     # 1. Send to MT5 bridge for execution
-    if BRIDGE_URL:
+    if BRIDGE_SIGNAL_URL:
         try:
             headers = {'Content-Type': 'application/json'}
             if BRIDGE_API_KEY:
                 headers['X-API-Key'] = BRIDGE_API_KEY
-            resp = requests.post(BRIDGE_URL, json=signal, headers=headers, timeout=15)
+            resp = requests.post(BRIDGE_SIGNAL_URL, json=signal, headers=headers, timeout=15)
             if resp.status_code == 200:
                 result = resp.json()
                 if result.get('success'):
@@ -1417,16 +1367,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             today_trades = [t for t in history if t.get('close_time', '').startswith(today)]
             today_pnl = sum(t.get('pnl_r', 0) for t in today_trades)
 
-            # MT5 connection status
+            # Bridge connection status
             try:
-                mt5_connected = mt5.terminal_info() is not None
+                br = requests.get(f"{BRIDGE_BASE_URL}/health", timeout=3)
+                bridge_connected = br.status_code == 200
             except Exception:
-                mt5_connected = False
+                bridge_connected = False
 
             status_data = {
                 'version': 'V10',
-                'data_source': 'mt5',
-                'mt5_connected': mt5_connected,
+                'data_source': 'bridge_http',
+                'bridge_connected': bridge_connected,
                 'instruments': list(INSTRUMENTS.keys()),
                 'stats': {
                     'total_signals': stats.get('total_signals', 0),
@@ -1613,12 +1564,12 @@ def scan_once():
 def run_continuous():
     """Run scanner continuously with staggered scheduling."""
     print(f"\n{'='*60}")
-    print(f"HVC LIVE SCANNER V10 - MT5 DIRECT")
+    print(f"HVC LIVE SCANNER V10 - BRIDGE HTTP")
     print(f"{'='*60}")
-    print(f"Data source: MetaTrader 5 (real-time)")
+    print(f"Data source: MT5 via Bridge HTTP (real-time, zero IPC conflicts)")
     print(f"Instruments: {len(INSTRUMENTS)} ({sum(1 for i in INSTRUMENTS.values() if i['source']=='mt5')} MT5 + {sum(1 for i in INSTRUMENTS.values() if i['source']=='binance')} Binance)")
     print(f"Signal lookback: {SIGNAL_LOOKBACK} candles")
-    print(f"Bridge: {BRIDGE_URL}")
+    print(f"Bridge: {BRIDGE_BASE_URL}")
     print(f"Zone persistence: {ZONE_MAX_CANDLES * 15}min max")
     print(f"Portfolio limits: max {PORTFOLIO_LIMITS['max_total_concurrent_trades']} concurrent, max {PORTFOLIO_LIMITS['max_correlated_trades']} correlated")
     print("=" * 60)
@@ -1786,9 +1737,9 @@ if __name__ == "__main__":
     elif "--performance" in sys.argv:
         show_performance()
     else:
-        # MT5 connection required for scanning
-        if not mt5_init():
-            print("[FATAL] Cannot start without MT5 connection. Is MT5 terminal running?")
+        # Bridge connection required for scanning (bridge owns the MT5 connection)
+        if not bridge_check():
+            print("[FATAL] Cannot start without bridge connection. Is hvc_mt5_bridge.py running?")
             sys.exit(1)
 
         if "--once" in sys.argv:

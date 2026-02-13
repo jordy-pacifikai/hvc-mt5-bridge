@@ -1009,6 +1009,42 @@ async def api_close_all(x_api_key: str = Header(None)):
     return close_all_positions()
 
 
+@app.get("/candles")
+async def get_candles(symbol: str, count: int = 1000):
+    """Return M1 candles for a symbol. Used by scanner V10 to avoid MT5 IPC conflicts."""
+    if not ensure_connected():
+        raise HTTPException(status_code=503, detail="MT5 not connected")
+
+    # Map scanner symbol to broker symbol
+    mt5_symbol = get_mt5_symbol(symbol)
+    if not mt5_symbol:
+        raise HTTPException(status_code=400, detail=f"Symbol {symbol} not mapped")
+
+    # Ensure symbol in MarketWatch
+    if not mt5.symbol_select(mt5_symbol, True):
+        raise HTTPException(status_code=400, detail=f"Cannot select {mt5_symbol}")
+
+    count = min(count, 2000)  # Cap at 2000
+
+    rates = mt5.copy_rates_from_pos(mt5_symbol, mt5.TIMEFRAME_M1, 0, count)
+    if rates is None or len(rates) == 0:
+        error = mt5.last_error()
+        raise HTTPException(status_code=502, detail=f"MT5 fetch failed: {error}")
+
+    # Convert to list of dicts (JSON-serializable)
+    candles = []
+    for r in rates:
+        candles.append({
+            "time": int(r[0]),
+            "open": float(r[1]),
+            "high": float(r[2]),
+            "low": float(r[3]),
+            "close": float(r[4]),
+        })
+
+    return {"symbol": symbol, "mt5_symbol": mt5_symbol, "count": len(candles), "candles": candles}
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "dry_run": DRY_RUN}
